@@ -4,7 +4,7 @@ mkdir -p /tmp/pyghmi
 cp -a * .git /tmp/pyghmi
 cd /tmp/pyghmi
 export PYEXEC=python3
-export DSCARGS="--with-python2=True --with-python3=True"
+export DSCARGS="--with-python2=False --with-python3=True"
 if grep wheezy /etc/os-release; then
     # also it's old, use python2 instead of python3
     export PYEXEC=python
