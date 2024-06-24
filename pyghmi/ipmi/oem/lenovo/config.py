@@ -272,7 +272,9 @@ class LenovoFirmwareConfig(object):
             cfgfilename = "config"
         options = {}
         data = None
-        if self.connection:
+        if not hasattr(self.xc, 'grab_redfish_response_with_status'):
+            rsp = ({}, 500)
+        elif self.connection:
             rsp = ({}, 200)
         else:
             rsp = self.xc.grab_redfish_response_with_status(
