@@ -1129,7 +1129,7 @@ class Session(object):
             ])
             self.currhashlib = hashlib.sha1
             self.currhashlen = 12
-        else:
+        elif self.attemptedhash == 256:
             data += bytearray([
                 0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
                 1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
@@ -1138,6 +1138,8 @@ class Session(object):
             ])
             self.currhashlib = hashlib.sha256
             self.currhashlen = 16
+        else:
+            raise exc.IpmiException('Unsupported attemptedhash')
         self.sessioncontext = 'OPENSESSION'
         self.lastpayload = None
         self.send_payload(
