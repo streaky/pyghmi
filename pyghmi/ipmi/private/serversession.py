@@ -146,7 +146,10 @@ class ServerSession(ipmisession.Session):
             return
         self.username = bytes(data[28:])
         if self.username.decode('utf-8') not in self.authdata:
-            # don't think about invalid usernames for now
+            # respond to the client with a 0Dh error code
+            self.send_payload(bytearray([clienttag, 0x0d]),
+                              constants.payload_types['rakp2'],
+                              retry=False)
             return
         uuidbytes = self.uuid.bytes
         self.uuiddata = uuidbytes
