@@ -39,7 +39,33 @@ class ServerSession(ipmisession.Session):
         return object.__new__(cls)
 
     def create_open_session_response(self, request):
+        requested_suite = request[8:24+8]
+        suites = {
+            3: bytearray([
+                0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
+                1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
+                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+            ]),
+            6: bytearray([
+                0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
+                1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
+                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+            ])
+        }
+
+        matching_suite = None
+        for key, value in suites.items():
+            if value == requested_suite:
+                matching_suite = key
+                break
+
         clienttag = request[0]
+
+        # if the requested suite doesn't match one we support send 11h error aka decimal 17
+        if matching_suite is None:
+            response = bytearray([clienttag, 17])
+            return response
+        
         # role = request[1]
         self.clientsessionid = request[4:8]
         # TODO(jbjohnso): intelligently handle integrity/auth/conf
@@ -49,18 +75,29 @@ class ServerSession(ipmisession.Session):
         # table 13-18, integrity, 1 for now is hmac-sha1-96, 4 is sha256
         # confidentiality: 1 is aes-cbc-128, the only one
         self.privlevel = 4
+
+        self.requested_suite = matching_suite
+        self.requested_suite_data = suites[matching_suite]
+
+        if self.requested_suite == 3:
+            self.currhashlib = hashlib.sha1
+            self.currhashlen = 12
+        elif self.requested_suite == 6:
+            self.currhashlib = hashlib.sha256
+            self.currhashlen = 16
+
         response = (bytearray([clienttag, 0, self.privlevel, 0])
-                    + self.clientsessionid + self.managedsessionid
-                    + bytearray([
-                        0, 0, 0, 8, 1, 0, 0, 0,  # auth
-                        1, 0, 0, 8, 1, 0, 0, 0,  # integrity
-                        2, 0, 0, 8, 1, 0, 0, 0,  # privacy
-                    ]))
+            + self.clientsessionid + self.managedsessionid
+            + self.requested_suite_data)
         return response
 
     def __init__(self, authdata, kg, clientaddr, netsocket, request, uuid,
                  bmc):
         # begin conversation per RMCP+ open session request
+
+        self.requested_suite = 0
+        self.requested_suite_data = []
+
         self.uuid = uuid
         self.currhashlib = hashlib.sha1
         self.currhashlen = 12
@@ -109,7 +146,10 @@ class ServerSession(ipmisession.Session):
             return
         self.username = bytes(data[28:])
         if self.username.decode('utf-8') not in self.authdata:
-            # don't think about invalid usernames for now
+            # respond to the client with a 0Dh error code
+            self.send_payload(bytearray([clienttag, 0x0d]),
+                              constants.payload_types['rakp2'],
+                              retry=False)
             return
         uuidbytes = self.uuid.bytes
         self.uuiddata = uuidbytes
@@ -123,7 +163,7 @@ class ServerSession(ipmisession.Session):
         if self.kg is None:
             self.kg = self.kuid
         authcode = hmac.new(
-            self.kuid, bytes(hmacdata), hashlib.sha1).digest()
+            self.kuid, bytes(hmacdata), self.currhashlib).digest()
         # regretably, ipmi mandates the server send out an hmac first
         # akin to a leak of /etc/shadow, not too worrisome if the secret
         # is complex, but terrible for most likely passwords selected by
@@ -146,14 +186,14 @@ class ServerSession(ipmisession.Session):
         self.sik = hmac.new(self.kg,
                             bytes(RmRc)
                             + struct.pack("2B", self.rolem, len(self.username))
-                            + self.username, hashlib.sha1).digest()
-        self.k1 = hmac.new(self.sik, b'\x01' * 20, hashlib.sha1).digest()
-        self.k2 = hmac.new(self.sik, b'\x02' * 20, hashlib.sha1).digest()
+                            + self.username, self.currhashlib).digest()
+        self.k1 = hmac.new(self.sik, b'\x01' * 20, self.currhashlib).digest()
+        self.k2 = hmac.new(self.sik, b'\x02' * 20, self.currhashlib).digest()
         self.aeskey = self.k2[0:16]
         hmacdata = (self.Rc + self.clientsessionid
                     + struct.pack("2B", self.rolem, len(self.username))
                     + self.username)
-        expectedauthcode = hmac.new(self.kuid, bytes(hmacdata), hashlib.sha1
+        expectedauthcode = hmac.new(self.kuid, bytes(hmacdata), self.currhashlib
                                     ).digest()
         authcode = struct.pack("%dB" % len(data[8:]), *data[8:])
         if expectedauthcode != authcode:
@@ -192,7 +232,7 @@ class ServerSession(ipmisession.Session):
             [tagvalue, statuscode, 0, 0]) + self.clientsessionid
         hmacdata = self.Rm + self.managedsessionid + self.uuiddata
         hmacdata = struct.pack('%dB' % len(hmacdata), *hmacdata)
-        authdata = hmac.new(self.sik, hmacdata, hashlib.sha1).digest()[:12]
+        authdata = hmac.new(self.sik, hmacdata, self.currhashlib).digest()[:self.currhashlen]
         payload += authdata
         self.send_payload(payload, constants.payload_types['rakp4'],
                           retry=False)
