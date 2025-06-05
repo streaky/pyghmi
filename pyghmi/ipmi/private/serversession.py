@@ -210,7 +210,7 @@ class ServerSession(ipmisession.Session):
             # though we include it in the suite list for reference
             raise ValueError("Unsupported integrity algorithm: {}".format(integrity))
 
-        self.integrityalgo: int = integrity
+        #self.integrityalgo: int = integrity
 
         response = (bytearray([clienttag, 0, self.privlevel, 0])
             + self.clientsessionid + self.managedsessionid
