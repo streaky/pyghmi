@@ -191,20 +191,26 @@ class ServerSession(ipmisession.Session):
 
         print("Integrity algorithm selected: {}".format(integrity))
 
-        if integrity == 0x00000001:
+        if integrity == 2:
+            # hmac-md5-128
+            self.currhashlib = hashlib.md5
+            self.currhashlen = 16
+        elif integrity == 1:
+            # hmac-sha1-96
             self.currhashlib = hashlib.sha1
             self.currhashlen = 12
-        elif integrity == 0x00000004:
+        elif integrity == 4:
+            # hmac-sha256-128
             self.currhashlib = hashlib.sha256
             self.currhashlen = 16
-        elif integrity == 0x00000002:
-            self.integrityalgo = hashlib.md5
-            self.currhashlen = 16
+
         else:
             # throw an error here, unsupported integrity algo
             # null is not supported, so we don't support suite 0
             # though we include it in the suite list for reference
             raise ValueError("Unsupported integrity algorithm: {}".format(integrity))
+
+        self.integrityalgo: int = integrity
 
         response = (bytearray([clienttag, 0, self.privlevel, 0])
             + self.clientsessionid + self.managedsessionid
