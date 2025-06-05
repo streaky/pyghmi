@@ -59,6 +59,11 @@ suites = {
     17: make_suite(0x0B, 0x04, 0x03),  # HMAC-SHA256 + AES-256
 }
 
+print("Available cipher suites:")
+for key, value in suites.items():
+    print(f"Suite {key}: {value.hex()} (Rakp: {value[0:4].hex()}, "
+          f"Integ: {value[4:8].hex()}, Conf: {value[8:12].hex()})")
+
 class ServerSession(ipmisession.Session):
     def __new__(cls, authdata, kg, clientaddr, netsocket, request, uuid,
                 bmc):
@@ -98,6 +103,8 @@ class ServerSession(ipmisession.Session):
         self.requested_suite_data = suites[matching_suite]
 
         integrity = int.from_bytes(self.requested_suite_data[4:8], "big")
+
+        print("Integrity algorithm selected: {}".format(integrity))
 
         if integrity == 0x00000001:
             self.currhashlib = hashlib.sha1
