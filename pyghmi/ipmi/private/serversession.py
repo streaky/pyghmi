@@ -31,18 +31,25 @@ import pyghmi.ipmi.private.session as ipmisession
 # used to build our suite records, which are 24 bytes long
 def make_suite(rakp_id: int, integ_id: int, conf_id: int) -> bytearray:
     """
-    Build a 24-byte IPMI LAN+ cipher-suite record by repeating
-    the three 32-bit (big-endian) IDs twice.
+    Build a 24-byte record in the exact format that ipmitool (and most BMCs)
+    actually send for “Get Cipher Suite Privilege”:
+
+      Row 0: [0,0,0, rakp_id] [integ_id,0,0,0]
+      Row 1: [integ_id,0,0, rakp_id] [integ_id,0,0,0]
+      Row 2: [conf_id,0,0, rakp_id] [integ_id,0,0,0]
+
+    i.e. each “row” is 8 bytes, so 3 rows × 8 bytes = 24 bytes total.
     """
-    rakp_bytes: bytes = rakp_id.to_bytes(4, "big")
-    integ_bytes: bytes = integ_id.to_bytes(4, "big")
-    conf_bytes: bytes = conf_id.to_bytes(4, "big")
+    # Row 0
+    row0 = bytes([0, 0, 0, rakp_id, integ_id, 0, 0, 0])
 
-    # Concatenate three `bytes` → one 12‐byte `bytes`
-    trio: bytes = rakp_bytes + integ_bytes + conf_bytes
+    # Row 1
+    row1 = bytes([integ_id, 0, 0, rakp_id, integ_id, 0, 0, 0])
 
-    # Repeat that 12 bytes to get 24 bytes, then wrap in bytearray
-    return bytearray(trio + trio)
+    # Row 2
+    row2 = bytes([conf_id, 0, 0, rakp_id, integ_id, 0, 0, 0])
+
+    return bytearray(row0 + row1 + row2)
 
 suites = {
     0:  make_suite(0x00, 0x00, 0x00),  # Null/no-auth/no-int/no-conf
