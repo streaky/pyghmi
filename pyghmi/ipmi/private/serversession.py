@@ -28,6 +28,20 @@ import uuid
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
 
+suites = {
+    0:  make_suite(0x00, 0x00, 0x00),  # Null/no-auth/no-int/no-conf
+    1:  make_suite(0x04, 0x02, 0x00),  # HMAC-MD5, no privacy
+    2:  make_suite(0x08, 0x01, 0x07),  # HMAC-SHA1 + DES
+    3:  make_suite(0x08, 0x01, 0x01),  # HMAC-SHA1 + AES-128
+    6:  make_suite(0x0B, 0x04, 0x01),  # HMAC-SHA256 + AES-128
+    7:  make_suite(0x08, 0x01, 0x03),  # HMAC-SHA1 + AES-256
+    8:  make_suite(0x0B, 0x04, 0x01),  # HMAC-SHA256 + AES-128  (identical IDs to 6 in this case)
+    11: make_suite(0x08, 0x01, 0x04),  # HMAC-SHA1 + 3DES
+    12: make_suite(0x0B, 0x04, 0x02),  # HMAC-SHA256 + AES-192
+    15: make_suite(0x08, 0x01, 0x05),  # HMAC-SHA1 + AES-128-GCM
+    16: make_suite(0x0B, 0x04, 0x05),  # HMAC-SHA256 + AES-128-GCM
+    17: make_suite(0x0B, 0x04, 0x03),  # HMAC-SHA256 + AES-256
+}
 
 class ServerSession(ipmisession.Session):
     def __new__(cls, authdata, kg, clientaddr, netsocket, request, uuid,
@@ -40,18 +54,6 @@ class ServerSession(ipmisession.Session):
 
     def create_open_session_response(self, request):
         requested_suite = request[8:24+8]
-        suites = {
-            3: bytearray([
-                0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
-                1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
-                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-            ]),
-            6: bytearray([
-                0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
-                1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
-                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-            ])
-        }
 
         matching_suite = None
         for key, value in suites.items():
@@ -79,12 +81,22 @@ class ServerSession(ipmisession.Session):
         self.requested_suite = matching_suite
         self.requested_suite_data = suites[matching_suite]
 
-        if self.requested_suite == 3:
+        integrity = int.from_bytes(self.requested_suite_data[4:8], "big")
+
+        if integrity == 0x00000001:
             self.currhashlib = hashlib.sha1
             self.currhashlen = 12
-        elif self.requested_suite == 6:
+        elif integrity == 0x00000004:
             self.currhashlib = hashlib.sha256
             self.currhashlen = 16
+        elif integrity == 0x00000002:
+            self.integrityalgo = hashlib.md5
+            self.currhashlen = 16
+        else:
+            # throw an error here, unsupported integrity algo
+            # null is not supported, so we don't support suite 0
+            # though we include it in the suite list for reference
+            raise ValueError("Unsupported integrity algorithm: {}".format(integrity))
 
         response = (bytearray([clienttag, 0, self.privlevel, 0])
             + self.clientsessionid + self.managedsessionid
@@ -433,3 +445,21 @@ class IpmiServer(object):
 
     def logout(self):
         pass
+
+# used to build our suite records, which are 24 bytes long
+def make_suite(rakp_id, integ_id, conf_id):
+    """
+    Build a 24-byte IPMI LAN+ cipher-suite record by repeating
+    the three 32-bit (big-endian) IDs twice.
+    """
+    trio = (
+        rakp_id.to_bytes(4, "big") +
+        integ_id.to_bytes(4, "big") +
+        conf_id.to_bytes(4, "big")
+    )
+
+    # 8 bytes × 2 = 16 bytes? No—8 bytes × 3 = 24 bytes
+    # each (RAKP, Integrity, Confidentiality) is 3 × 4 = 12 bytes,
+    # so “trio” is 12 bytes, and “trio + trio” is 24 bytes total.
+    # (RAKP.to_bytes(4) + Integ.to_bytes(4) + Conf.to_bytes(4)) is 12 bytes; repeating it gives 24.
+    return trio + trio
