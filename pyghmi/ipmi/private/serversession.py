@@ -28,17 +28,115 @@ import uuid
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
 
-suites = {
+suites: dict[int, bytearray] = {
+    0: bytearray([
+        # Suite 0: “no auth, no integ, no conf”
+        0,0,0,8,   0,0,0,0,  
+        1,0,0,8,   0,0,0,0,  
+        2,0,0,8,   0,0,0,0,
+    ]),
+    1: bytearray([
+        # Suite 1: RAKP-HMAC-SHA1 (0x01), none, none
+        0,0,0,8,   1,0,0,0,
+        1,0,0,8,   0,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    2: bytearray([
+        # Suite 2: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), none
+        0,0,0,8,   1,0,0,0,
+        1,0,0,8,   1,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
     3: bytearray([
-        0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
-        1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
-        2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+        # Suite 3: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), AES-CBC-128 (0x01)
+        0,0,0,8,   1,0,0,0,
+        1,0,0,8,   1,0,0,0,
+        2,0,0,8,   1,0,0,0,
+    ]),
+    4: bytearray([
+        # Suite 4: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), xRC4-128 (0x02)
+        0,0,0,8,   1,0,0,0,
+        1,0,0,8,   1,0,0,0,
+        2,0,0,8,   2,0,0,0,
+    ]),
+    5: bytearray([
+        # Suite 5: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), xRC4-40 (0x03)
+        0,0,0,8,   1,0,0,0,
+        1,0,0,8,   1,0,0,0,
+        2,0,0,8,   3,0,0,0,
     ]),
     6: bytearray([
-        0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
-        1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
-        2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-    ])
+        # Suite 6: RAKP-HMAC-MD5 (0x02), none, none
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   0,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    7: bytearray([
+        # Suite 7: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), none
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   2,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    8: bytearray([
+        # Suite 8: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), AES-CBC-128 (0x01)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   2,0,0,0,
+        2,0,0,8,   1,0,0,0,
+    ]),
+    9: bytearray([
+        # Suite 9: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), xRC4-128 (0x02)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   2,0,0,0,
+        2,0,0,8,   2,0,0,0,
+    ]),
+    10: bytearray([
+        # Suite 10: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), xRC4-40 (0x03)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   2,0,0,0,
+        2,0,0,8,   3,0,0,0,
+    ]),
+    11: bytearray([
+        # Suite 11: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), none
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   3,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    12: bytearray([
+        # Suite 12: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), AES-CBC-128 (0x01)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   3,0,0,0,
+        2,0,0,8,   1,0,0,0,
+    ]),
+    13: bytearray([
+        # Suite 13: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), xRC4-128 (0x02)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   3,0,0,0,
+        2,0,0,8,   2,0,0,0,
+    ]),
+    14: bytearray([
+        # Suite 14: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), xRC4-40 (0x03)
+        0,0,0,8,   2,0,0,0,
+        1,0,0,8,   3,0,0,0,
+        2,0,0,8,   3,0,0,0,
+    ]),
+    15: bytearray([
+        # Suite 15: RAKP-HMAC-SHA256 (0x03), none, none
+        0,0,0,8,   3,0,0,0,
+        1,0,0,8,   0,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    16: bytearray([
+        # Suite 16: RAKP-HMAC-SHA256 (0x03), HMAC-SHA256-128 (0x04), none
+        0,0,0,8,   3,0,0,0,
+        1,0,0,8,   4,0,0,0,
+        2,0,0,8,   0,0,0,0,
+    ]),
+    17: bytearray([
+        # Suite 17: RAKP-HMAC-SHA256 (0x03), HMAC-SHA256-128 (0x04), AES-CBC-128 (0x01)
+        0,0,0,8,   3,0,0,0,
+        1,0,0,8,   4,0,0,0,
+        2,0,0,8,   1,0,0,0,
+    ]),
 }
 
 print("Available cipher suites:")
@@ -89,7 +187,7 @@ class ServerSession(ipmisession.Session):
 
         self.requested_suite_data = suites[matching_suite]
 
-        integrity = int.from_bytes(self.requested_suite_data[4:8], "big")
+        integrity = int.from_bytes(self.requested_suite_data[4:8], 'little')
 
         print("Integrity algorithm selected: {}".format(integrity))
 
