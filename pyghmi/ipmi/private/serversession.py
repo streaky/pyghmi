@@ -28,28 +28,15 @@ import uuid
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
 
-# used to build our suite records, which are 24 bytes long
-def make_suite(rakp_id: int, integ_id: int, conf_id: int) -> bytearray:
+def make_suite(integrity: int, confidentiality: int, rakp: int) -> bytes:
+    """Creates a cipher suite byte array.
+
+    :param integrity: The integrity algorithm code (e.g., 0x04 for HMAC-MD5)
+    :param confidentiality: The confidentiality algorithm code (e.g., 0x01 for AES-128)
+    :param rakp: The RAKP algorithm code (e.g., 0x03 for AES-128)
+    :return: A byte array representing the cipher suite
     """
-    Build a 24-byte record in the exact format that ipmitool (and most BMCs)
-    actually send for “Get Cipher Suite Privilege”:
-
-      Row 0: [0,0,0, rakp_id] [integ_id,0,0,0]
-      Row 1: [integ_id,0,0, rakp_id] [integ_id,0,0,0]
-      Row 2: [conf_id,0,0, rakp_id] [integ_id,0,0,0]
-
-    i.e. each “row” is 8 bytes, so 3 rows × 8 bytes = 24 bytes total.
-    """
-    # Row 0
-    row0 = bytes([0, 0, 0, rakp_id, integ_id, 0, 0, 0])
-
-    # Row 1
-    row1 = bytes([integ_id, 0, 0, rakp_id, integ_id, 0, 0, 0])
-
-    # Row 2
-    row2 = bytes([conf_id, 0, 0, rakp_id, integ_id, 0, 0, 0])
-
-    return bytearray(row0 + row1 + row2)
+    return struct.pack('>IIBB', integrity, confidentiality, rakp, 0, 0)
 
 suites = {
     0:  make_suite(0x00, 0x00, 0x00),  # Null/no-auth/no-int/no-conf
