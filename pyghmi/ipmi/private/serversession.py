@@ -76,6 +76,8 @@ class ServerSession(ipmisession.Session):
     def create_open_session_response(self, request):
         requested_suite = request[8:24+8]
 
+        print("Requested cipher suite: {}".format(requested_suite.hex()))
+
         matching_suite = None
         for key, value in suites.items():
             if value == requested_suite:
@@ -100,6 +102,9 @@ class ServerSession(ipmisession.Session):
         self.privlevel = 4
 
         self.requested_suite = matching_suite
+
+        print("Requested cipher suite: {}".format(self.requested_suite))
+
         self.requested_suite_data = suites[matching_suite]
 
         integrity = int.from_bytes(self.requested_suite_data[4:8], "big")
