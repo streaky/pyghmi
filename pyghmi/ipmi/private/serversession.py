@@ -28,6 +28,22 @@ import uuid
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
 
+# used to build our suite records, which are 24 bytes long
+def make_suite(rakp_id: int, integ_id: int, conf_id: int) -> bytearray:
+    """
+    Build a 24-byte IPMI LAN+ cipher-suite record by repeating
+    the three 32-bit (big-endian) IDs twice.
+    """
+    rakp_bytes: bytes = rakp_id.to_bytes(4, "big")
+    integ_bytes: bytes = integ_id.to_bytes(4, "big")
+    conf_bytes: bytes = conf_id.to_bytes(4, "big")
+
+    # Concatenate three `bytes` → one 12‐byte `bytes`
+    trio: bytes = rakp_bytes + integ_bytes + conf_bytes
+
+    # Repeat that 12 bytes to get 24 bytes, then wrap in bytearray
+    return bytearray(trio + trio)
+
 suites = {
     0:  make_suite(0x00, 0x00, 0x00),  # Null/no-auth/no-int/no-conf
     1:  make_suite(0x04, 0x02, 0x00),  # HMAC-MD5, no privacy
@@ -445,21 +461,3 @@ class IpmiServer(object):
 
     def logout(self):
         pass
-
-# used to build our suite records, which are 24 bytes long
-def make_suite(rakp_id, integ_id, conf_id):
-    """
-    Build a 24-byte IPMI LAN+ cipher-suite record by repeating
-    the three 32-bit (big-endian) IDs twice.
-    """
-    trio = (
-        rakp_id.to_bytes(4, "big") +
-        integ_id.to_bytes(4, "big") +
-        conf_id.to_bytes(4, "big")
-    )
-
-    # 8 bytes × 2 = 16 bytes? No—8 bytes × 3 = 24 bytes
-    # each (RAKP, Integrity, Confidentiality) is 3 × 4 = 12 bytes,
-    # so “trio” is 12 bytes, and “trio + trio” is 24 bytes total.
-    # (RAKP.to_bytes(4) + Integ.to_bytes(4) + Conf.to_bytes(4)) is 12 bytes; repeating it gives 24.
-    return trio + trio
