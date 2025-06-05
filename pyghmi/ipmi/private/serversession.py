@@ -170,6 +170,12 @@ class ServerSession(ipmisession.Session):
         if matching_suite is None:
             response = bytearray([clienttag, 17])
             return response
+
+        # if matching_suite isn't in 3, 8, 17 send 11h error aka decimal 17
+        # this is temporary whilst we figure the rest out
+        if matching_suite not in (3, 8, 17):
+            response = bytearray([clienttag, 17])
+            return response
         
         # role = request[1]
         self.clientsessionid = request[4:8]
