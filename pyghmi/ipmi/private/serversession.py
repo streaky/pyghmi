@@ -28,33 +28,17 @@ import uuid
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
 
-def make_suite(rakp: int, integ: int, conf: int) -> bytearray:
-    """
-    Build the 24-byte "ipmitool" format for an IPMI 2.0 LAN+ cipher suite.
-    Each 8-byte row is:
-      Row 0: [0, 0, 0, rakp] + [integ, 0, 0, 0]
-      Row 1: [integ, 0, 0, rakp] + [integ, 0, 0, 0]
-      Row 2: [conf, 0, 0, rakp] + [integ, 0, 0, 0]
-    """
-    row0 = bytes([0x00, 0x00, 0x00, rakp, integ, 0x00, 0x00, 0x00])
-    row1 = bytes([integ, 0x00, 0x00, rakp, integ, 0x00, 0x00, 0x00])
-    row2 = bytes([conf,  0x00, 0x00, rakp, integ, 0x00, 0x00, 0x00])
-    return bytearray(row0 + row1 + row2)
-
-# Standard non-OEM suites (ID: (rakp, integ, conf)):
-suites: dict[int, bytearray] = {
-    0:  make_suite(0x00, 0x00, 0x00),  # Null/no-auth/no-int/no-conf
-    1:  make_suite(0x04, 0x02, 0x00),  # HMAC-MD5, no privacy
-    2:  make_suite(0x08, 0x01, 0x07),  # HMAC-SHA1 + DES
-    3:  make_suite(0x08, 0x01, 0x01),  # HMAC-SHA1 + AES-128
-    6:  make_suite(0x0B, 0x04, 0x01),  # HMAC-SHA256 + AES-128
-    7:  make_suite(0x08, 0x01, 0x03),  # HMAC-SHA1 + AES-256
-    8:  make_suite(0x0B, 0x04, 0x01),  # HMAC-SHA256 + AES-128 (same as 6)
-    11: make_suite(0x08, 0x01, 0x04),  # HMAC-SHA1 + 3DES
-    12: make_suite(0x0B, 0x04, 0x02),  # HMAC-SHA256 + AES-192
-    15: make_suite(0x08, 0x01, 0x05),  # HMAC-SHA1 + AES-128-GCM
-    16: make_suite(0x0B, 0x04, 0x05),  # HMAC-SHA256 + AES-128-GCM
-    17: make_suite(0x0B, 0x04, 0x03),  # HMAC-SHA256 + AES-256
+suites = {
+    3: bytearray([
+        0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
+        1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
+        2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+    ]),
+    6: bytearray([
+        0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
+        1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
+        2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+    ])
 }
 
 print("Available cipher suites:")
