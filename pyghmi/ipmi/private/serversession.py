@@ -190,11 +190,15 @@ class ServerSession(ipmisession.Session):
         algo_map = {
             1: (hashlib.sha1, 12),
             2: (hashlib.md5, 16),
-            3: (hashlib.sha256, 16)
+            #3: (hashlib.md5, 16), # disabled because not hmac
+            4: (hashlib.sha256, 16),
+            5: (hashlib.sha384, 24),
+            6: (hashlib.sha512, 24),
         }
         try:
             self.currhashlib
             self.currhashlen = algo_map[integrity]
+            self.integrityalgo = integrity
         except KeyError:
             return bytearray([clienttag, 17])
 
