@@ -157,10 +157,11 @@ class ServerSession(ipmisession.Session):
         return object.__new__(cls)
 
     def create_open_session_response(self, request: bytearray) -> bytearray:
-        requested_suite = request[8:24+8]
 
+        requested_suite = request[8:24+8]
         print(f"Requested cipher suite: {format(requested_suite.hex())}")
 
+        # this is legacy code and can be made much simpler - just not right now
         matching_suite = None
         for key, value in suites.items():
             if value == requested_suite:
@@ -175,16 +176,10 @@ class ServerSession(ipmisession.Session):
         
         # role = request[1]
         self.clientsessionid = request[4:8]
-        # TODO(jbjohnso): intelligently handle integrity/auth/conf
-        # for now, forcibly do cipher suite 3
         self.managedsessionid: bytes = os.urandom(4)
-        # table 13-17, 1 for now (hmac-sha1), 3 should also be supported
-        # table 13-18, integrity, 1 for now is hmac-sha1-96, 4 is sha256
-        # confidentiality: 1 is aes-cbc-128, the only one
         self.privlevel = 4
 
         self.requested_suite = matching_suite
-
         print(f"Requested cipher suite: {format(self.requested_suite)}")
 
         self.requested_suite_data = suites[matching_suite]
