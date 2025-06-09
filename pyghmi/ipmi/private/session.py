@@ -31,12 +31,22 @@ from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers import modes
 
+from cryptography.hazmat.primitives.ciphers.base import AEADEncryptionContext
 import pyghmi.exceptions as exc
 from pyghmi.ipmi.private import constants
 from pyghmi.ipmi.private import util
 from pyghmi.ipmi.private.util import _monotonic_time
 from pyghmi.ipmi.private.util import get_ipmi_error
 
+# confidentiality algorithm support data
+CONF_ALGOS = {
+    0: {"name": "none", "keylen": 0, "ivlen": 0, "pad": False, "encrypt": None},
+    1: {"name": "aes-cbc-128", "keylen": 16, "ivlen": 16, "pad": True, "algo": algorithms.AES},
+    2: {"name": "xrc4-128", "keylen": 16, "ivlen": 0, "pad": False},
+    3: {"name": "xrc4-40",  "keylen": 5,  "ivlen": 0, "pad": False},
+    4: {"name": "aes-cbc-256", "keylen": 32, "ivlen": 16, "pad": True, "algo": algorithms.AES},
+    5: {"name": "aes-cbc-192", "keylen": 24, "ivlen": 16, "pad": True, "algo": algorithms.AES},
+}
 
 KEEPALIVE_SESSIONS = threading.RLock()
 WAITING_SESSIONS = threading.RLock()
@@ -872,6 +882,10 @@ class Session(object):
         self.send_payload(payload=ipmipayload, payload_type=payload_type,
                           retry=retry, delay_xmit=delay_xmit, timeout=timeout)
 
+    def _aespad(self, data):
+        pad_len = 16 - ((len(data) + 1) % 16)
+        return data + bytes([pad_len] * pad_len)
+
     def send_payload(self, payload=(), payload_type=None, retry=True,
                      delay_xmit=None, needskeepalive=False, timeout=None):
         """Send payload over the IPMI Session
@@ -931,33 +945,55 @@ class Session(object):
             if totlen in (56, 84, 112, 128, 156):
                 message.append(0)  # Legacy pad as mandated by ipmi spec
         elif self.ipmiversion == 2.0:
+
             psize = len(payload)
-            if self.confalgo:
-                pad = (psize + 1) % 16  # pad has to cope with one byte
-                # field like the _aespad function
-                if pad:  # if no pad needed, then we take no more action
-                    pad = 16 - pad
-                # new payload size grew according to pad
-                newpsize = psize + pad + 17
-                # size, plus pad length, plus 16 byte IV
-                # (Table 13-20)
-                message.append(newpsize & 0xff)
-                message.append(newpsize >> 8)
-                iv = os.urandom(16)
-                message += iv
-                payloadtocrypt = bytes(payload + _aespad(payload))
-                crypter = Cipher(
-                    algorithm=algorithms.AES(self.aeskey),
-                    mode=modes.CBC(iv),
-                    backend=self._crypto_backend
-                )
-                encryptor = crypter.encryptor()
-                message += encryptor.update(payloadtocrypt
-                                            ) + encryptor.finalize()
-            else:  # no confidetiality algorithm
-                message.append(psize & 0xff)
+            confinfo = CONF_ALGOS.get(self.confalgo, CONF_ALGOS[0])
+
+            pad = confinfo["pad"]
+            ivlen = confinfo["ivlen"]
+            keylen = confinfo["keylen"]
+
+            if self.confalgo == 0:
+                # No encryption
+                message.append(psize & 0xFF)
                 message.append(psize >> 8)
                 message += payload
+            else:
+                if pad:
+                    padded_payload = _aespad(payload)
+                else:
+                    padded_payload = payload
+
+                iv = os.urandom(ivlen) if ivlen else b""
+                newpsize = len(padded_payload) + 1 + ivlen  # padlen byte + IV + payload
+                message.append(newpsize & 0xFF)
+                message.append(newpsize >> 8)
+                if iv:
+                    message += iv
+
+                if self.confalgo in [1, 4, 5]:  # AES variants
+                    crypter = Cipher(
+                        algorithm=confinfo["algo"](self.aeskey),
+                        mode=modes.CBC(iv),
+                        backend=self._crypto_backend
+                    )
+                    encryptor = crypter.encryptor()
+                    enc = encryptor.update(padded_payload) + encryptor.finalize()
+                    message += enc
+
+                elif self.confalgo in [2, 3]:  # RC4 variants
+                    crypter = Cipher(
+                        algorithm=algorithms.ARC4(self.aeskey),
+                        mode=None,
+                        backend=self._crypto_backend
+                    )
+                    encryptor: AEADEncryptionContext = crypter.encryptor()
+                    message += encryptor.update(padded_payload)
+
+                else:
+                    # Unknown/conflicting algo
+                    raise ValueError(f"Unsupported confidentiality algorithm: {self.confalgo}")
+
             if self.integrityalgo:  # see table 13-8,
                 # RMCP+ packet format
                 # TODO(jbjohnso): SHA256 which is now
