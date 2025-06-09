@@ -187,6 +187,9 @@ class ServerSession(ipmisession.Session):
         integrity: int = int.from_bytes(self.requested_suite_data[4:8], 'little')
         print(f"Integrity algorithm selected: {format(integrity)}")
 
+        self.confalgo: int = int.from_bytes(self.requested_suite_data[8:12], 'little')
+        print(f"Confidentiality algorithm selected: {format(self.confalgo)}")
+
         algo_map = {
             1: (hashlib.sha1, 12),
             2: (hashlib.md5, 16),
