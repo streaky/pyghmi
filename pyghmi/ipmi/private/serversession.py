@@ -139,12 +139,15 @@ suites: dict[int, bytearray] = {
     ]),
 }
 
+supported_suites: list[int] = [3, 8, 17]
+
 print("Available cipher suites:")
 for key, value in suites.items():
     print(f"Suite {key}: {value.hex()} (Rakp: {value[0:4].hex()}, "
           f"Integ: {value[4:8].hex()}, Conf: {value[8:12].hex()})")
 
 class ServerSession(ipmisession.Session):
+
     def __new__(cls, authdata, kg, clientaddr, netsocket, request, uuid,
                 bmc):
         # Need to do default new type behavior.  The normal session
@@ -153,10 +156,10 @@ class ServerSession(ipmisession.Session):
         # with in the server case (one file descriptor per bmc)
         return object.__new__(cls)
 
-    def create_open_session_response(self, request):
+    def create_open_session_response(self, request: bytearray) -> bytearray:
         requested_suite = request[8:24+8]
 
-        print("Requested cipher suite: {}".format(requested_suite.hex()))
+        print(f"Requested cipher suite: {format(requested_suite.hex())}")
 
         matching_suite = None
         for key, value in suites.items():
@@ -164,24 +167,17 @@ class ServerSession(ipmisession.Session):
                 matching_suite = key
                 break
 
-        clienttag = request[0]
+        clienttag = int(request[0])
 
         # if the requested suite doesn't match one we support send 11h error aka decimal 17
-        if matching_suite is None:
-            response = bytearray([clienttag, 17])
-            return response
-
-        # if matching_suite isn't in 3, 8, 17 send 11h error aka decimal 17
-        # this is temporary whilst we figure the rest out
-        if matching_suite not in (3, 8, 17):
-            response = bytearray([clienttag, 17])
-            return response
+        if matching_suite is None or matching_suite not in supported_suites:
+            return bytearray([clienttag, 17])
         
         # role = request[1]
         self.clientsessionid = request[4:8]
         # TODO(jbjohnso): intelligently handle integrity/auth/conf
         # for now, forcibly do cipher suite 3
-        self.managedsessionid = os.urandom(4)
+        self.managedsessionid: bytes = os.urandom(4)
         # table 13-17, 1 for now (hmac-sha1), 3 should also be supported
         # table 13-18, integrity, 1 for now is hmac-sha1-96, 4 is sha256
         # confidentiality: 1 is aes-cbc-128, the only one
@@ -189,41 +185,30 @@ class ServerSession(ipmisession.Session):
 
         self.requested_suite = matching_suite
 
-        print("Requested cipher suite: {}".format(self.requested_suite))
+        print(f"Requested cipher suite: {format(self.requested_suite)}")
 
         self.requested_suite_data = suites[matching_suite]
 
-        integrity = int.from_bytes(self.requested_suite_data[4:8], 'little')
+        integrity: int = int.from_bytes(self.requested_suite_data[4:8], 'little')
+        print(f"Integrity algorithm selected: {format(integrity)}")
 
-        print("Integrity algorithm selected: {}".format(integrity))
+        algo_map = {
+            1: (hashlib.sha1, 12),
+            2: (hashlib.md5, 16),
+            3: (hashlib.sha256, 16)
+        }
+        try:
+            self.currhashlib
+            self.currhashlen = algo_map[integrity]
+        except KeyError:
+            return bytearray([clienttag, 17])
 
-        if integrity == 1:
-            # hmac-sha1-96
-            self.currhashlib = hashlib.sha1
-            self.currhashlen = 12
-        elif integrity == 2:
-            # hmac-md5-128
-            self.currhashlib = hashlib.md5
-            self.currhashlen = 16
-        elif integrity == 3:
-            # hmac-sha256-128
-            self.currhashlib = hashlib.sha256
-            self.currhashlen = 16
-        else:
-            # throw an error here, unsupported integrity algo
-            # null is not supported, so we don't support suite 0
-            # though we include it in the suite list for reference
-            raise ValueError("Unsupported integrity algorithm: {}".format(integrity))
-
-        #self.integrityalgo: int = integrity
-
-        response = (bytearray([clienttag, 0, self.privlevel, 0])
+        response = bytearray(bytearray([clienttag, 0, self.privlevel, 0])
             + self.clientsessionid + self.managedsessionid
             + self.requested_suite_data)
         return response
 
-    def __init__(self, authdata, kg, clientaddr, netsocket, request, uuid,
-                 bmc):
+    def __init__(self, authdata, kg, clientaddr, netsocket, request, uuid, bmc):
         # begin conversation per RMCP+ open session request
 
         self.requested_suite = 0
