@@ -184,10 +184,13 @@ class ServerSession(ipmisession.Session):
 
         self.requested_suite_data = suites[matching_suite]
 
-        integrity: int = int.from_bytes(self.requested_suite_data[4:8], 'little')
-        print(f"Integrity algorithm selected: {format(integrity)}")
+        # not implemented yet
+        # auth  = int.from_bytes(self.requested_suite_data[4:8], 'little')
 
-        self.confalgo: int = int.from_bytes(self.requested_suite_data[8:12], 'little')
+        self.integrityalgo: int.from_bytes(self.requested_suite_data[12:16], 'little')
+        print(f"Integrity algorithm selected: {format(self.integrityalgo)}")
+
+        self.confalgo: int  = int.from_bytes(self.requested_suite_data[20:24], 'little')
         print(f"Confidentiality algorithm selected: {format(self.confalgo)}")
 
         algo_map = {
@@ -200,8 +203,7 @@ class ServerSession(ipmisession.Session):
         }
         try:
             self.currhashlib
-            self.currhashlen = algo_map[integrity]
-            self.integrityalgo = integrity
+            self.currhashlen = algo_map[self.integrityalgo]
         except KeyError:
             return bytearray([clienttag, 17])
 
