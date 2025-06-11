@@ -202,8 +202,8 @@ class ServerSession(ipmisession.Session):
             6: (hashlib.sha512, 24),
         }
         try:
-            self.currhashlib
-            self.currhashlen = algo_map[self.integrityalgo]
+            self.currhashlib = algo_map[self.integrityalgo][0]
+            self.currhashlen = algo_map[self.integrityalgo][1]
         except KeyError:
             return bytearray([clienttag, 17])
 
