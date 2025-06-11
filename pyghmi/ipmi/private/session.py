@@ -1698,7 +1698,8 @@ class Session(object):
             return
         self.sessionid = self.pendingsessionid
         self.integrityalgo = self.attemptedhash
-        self.confalgo = 'aes'
+        # AES-CBC-128 is currently the only supported confidentiality algorithm
+        self.confalgo = 1
         self.sequencenumber = 1
         self.sessioncontext = 'ESTABLISHED'
         self.lastpayload = None

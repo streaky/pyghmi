@@ -1199,7 +1199,8 @@ class Session(object):
             return
         self.sessionid = self.pendingsessionid
         self.integrityalgo = self.attemptedhash
-        self.confalgo = 'aes'
+        # AES-CBC-128 confidentiality is negotiated in open session
+        self.confalgo = 1
         self.sequencenumber = 1
         self.sessioncontext = 'ESTABLISHED'
         self.lastpayload = None

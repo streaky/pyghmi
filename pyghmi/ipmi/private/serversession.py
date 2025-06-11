@@ -356,8 +356,9 @@ class ServerSession(ipmisession.Session):
         payload += authdata
         self.send_payload(payload, constants.payload_types['rakp4'],
                           retry=False)
-        self.confalgo = 'aes'
-        self.integrityalgo = 'sha1'
+        # Use the algorithms selected during open session negotiation
+        self.confalgo = self.requested_confalgo
+        self.integrityalgo = self.requested_integrityalgo
         self.sequencenumber = 1
         self.sessionid = struct.unpack(
             '<I', struct.pack('4B', *self.clientsessionid))[0]
