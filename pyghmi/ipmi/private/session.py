@@ -882,10 +882,6 @@ class Session(object):
         self.send_payload(payload=ipmipayload, payload_type=payload_type,
                           retry=retry, delay_xmit=delay_xmit, timeout=timeout)
 
-    def _aespad(self, data):
-        pad_len = 16 - ((len(data) + 1) % 16)
-        return data + bytes([pad_len] * pad_len)
-
     def send_payload(self, payload=(), payload_type=None, retry=True,
                      delay_xmit=None, needskeepalive=False, timeout=None):
         """Send payload over the IPMI Session
