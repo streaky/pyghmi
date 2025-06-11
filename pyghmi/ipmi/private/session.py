@@ -956,12 +956,12 @@ class Session(object):
                 message += payload
             else:
                 if pad:
-                    padded_payload = _aespad(payload)
+                    padded_payload: bytearray = payload + _aespad(payload)
                 else:
-                    padded_payload = payload
+                    padded_payload: bytearray = payload
 
                 iv = os.urandom(ivlen) if ivlen else b""
-                newpsize = len(padded_payload) + 1 + ivlen  # padlen byte + IV + payload
+                newpsize = len(padded_payload) + ivlen
                 message.append(newpsize & 0xFF)
                 message.append(newpsize >> 8)
                 if iv:
