@@ -35,6 +35,7 @@ from pyghmi.ipmi.private.cipher_suite import (
 suites: dict[int, bytearray] = {
     sid: build_cipher_suite(*algos)
     for sid, algos in CIPHER_SUITE_PARAMS.items()
+}
 
 supported_suites: list[int] = list(suites.keys())
 
