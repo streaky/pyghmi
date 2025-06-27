@@ -37,16 +37,43 @@ from pyghmi.ipmi.private import constants
 from pyghmi.ipmi.private import util
 from pyghmi.ipmi.private.util import _monotonic_time
 from pyghmi.ipmi.private.util import get_ipmi_error
+from pyghmi.ipmi.private.cipher_suite import build_cipher_suite
 
 # confidentiality algorithm support data
 CONF_ALGOS = {
-    0: {"name": "none", "keylen": 0, "ivlen": 0, "pad": False, "encrypt": None},
-    1: {"name": "aes-cbc-128", "keylen": 16, "ivlen": 16, "pad": True, "algo": algorithms.AES},
+    0: {
+        "name": "none",
+        "keylen": 0,
+        "ivlen": 0,
+        "pad": False,
+        "encrypt": None,
+    },
+    1: {
+        "name": "aes-cbc-128",
+        "keylen": 16,
+        "ivlen": 16,
+        "pad": True,
+        "algo": algorithms.AES,
+    },
     2: {"name": "xrc4-128", "keylen": 16, "ivlen": 0, "pad": False},
-    3: {"name": "xrc4-40",  "keylen": 5,  "ivlen": 0, "pad": False},
-    4: {"name": "aes-cbc-256", "keylen": 32, "ivlen": 16, "pad": True, "algo": algorithms.AES},
-    5: {"name": "aes-cbc-192", "keylen": 24, "ivlen": 16, "pad": True, "algo": algorithms.AES},
+    3: {"name": "xrc4-40", "keylen": 5, "ivlen": 0, "pad": False},
+    4: {
+        "name": "aes-cbc-256",
+        "keylen": 32,
+        "ivlen": 16,
+        "pad": True,
+        "algo": algorithms.AES,
+    },
+    5: {
+        "name": "aes-cbc-192",
+        "keylen": 24,
+        "ivlen": 16,
+        "pad": True,
+        "algo": algorithms.AES,
+    },
 }
+
+# Cipher suite data is defined in ``cipher_suite`` module.
 
 KEEPALIVE_SESSIONS = threading.RLock()
 WAITING_SESSIONS = threading.RLock()
@@ -485,14 +512,16 @@ class Session(object):
             return self
 
     def __init__(self,
-                 bmc,
-                 userid,
-                 password,
-                 port=623,
-                 kg=None,
-                 onlogon=None,
-                 privlevel=None,
-                 keepalive=True):
+        bmc,
+        userid,
+        password,
+        port=623,
+        kg=None,
+        onlogon=None,
+        privlevel=None,
+        keepalive=True,
+        confalgo=1
+    ):
         if hasattr(self, 'initialized'):
             # new found an existing session, do not corrupt it
             if onlogon is None:
@@ -553,6 +582,7 @@ class Session(object):
             self.kg = kg
         else:
             self.kg = self.password
+        self.confalgo = confalgo
         self.port = port
         if onlogon is None:
             self.async_ = False
@@ -623,7 +653,9 @@ class Session(object):
         #                 would show xCAT
         self.localsid = 2017673555
         self.remseqnumber = None
-        self.confalgo = 0
+        # Default to AES-CBC-128 confidentiality unless caller specified
+        if not hasattr(self, 'confalgo'):
+            self.confalgo = 1
         self.aeskey = None
         self.integrityalgo = 0
         self.attemptedhash = 256
@@ -947,7 +979,6 @@ class Session(object):
 
             pad = confinfo["pad"]
             ivlen = confinfo["ivlen"]
-            keylen = confinfo["keylen"]
 
             if self.confalgo == 0:
                 # No encryption
@@ -983,12 +1014,18 @@ class Session(object):
                         mode=None,
                         backend=self._crypto_backend
                     )
-                    encryptor: AEADEncryptionContext = crypter.encryptor()
+                    enc = (
+                        encryptor.update(padded_payload)
+                        + encryptor.finalize()
+                    )
                     message += encryptor.update(padded_payload)
 
                 else:
                     # Unknown/conflicting algo
-                    raise ValueError(f"Unsupported confidentiality algorithm: {self.confalgo}")
+                    raise ValueError(
+                        "Unsupported confidentiality algorithm: "
+                        f"{self.confalgo}"
+                    )
 
             if self.integrityalgo:  # see table 13-8,
                 # RMCP+ packet format
@@ -1150,28 +1187,21 @@ class Session(object):
             0, 0,  # reserved
         ])
         data += struct.pack("<I", self.localsid)
-        # auth 3 sha256
-        # integrity... 4 = sha256
         if self.attemptedhash == 1:
-            data += bytearray([
-                0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
-                1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
-                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-                # 2,0,0,8,0,0,0,0, #no privacy confalgo
-            ])
+            authalgo = 1
+            integralgo = 1
             self.currhashlib = hashlib.sha1
             self.currhashlen = 12
         elif self.attemptedhash == 256:
-            data += bytearray([
-                0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
-                1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
-                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-                # 2,0,0,8,0,0,0,0, #no privacy confalgo
-            ])
+            authalgo = 3
+            integralgo = 4
             self.currhashlib = hashlib.sha256
             self.currhashlen = 16
         else:
             raise exc.IpmiException('Unsupported attemptedhash')
+        
+        data += build_cipher_suite(authalgo, integralgo, self.confalgo)
+
         self.sessioncontext = 'OPENSESSION'
         self.lastpayload = None
         self.send_payload(
@@ -1636,7 +1666,9 @@ class Session(object):
                             + self.userid, self.currhashlib).digest()
         self.k1 = hmac.new(self.sik, b'\x01' * 20, self.currhashlib).digest()
         self.k2 = hmac.new(self.sik, b'\x02' * 20, self.currhashlib).digest()
-        self.aeskey = self.k2[0:16]
+        confinfo = CONF_ALGOS.get(self.confalgo, CONF_ALGOS[0])
+        keylen = confinfo.get("keylen", 0)
+        self.aeskey = self.k2[:keylen] if keylen else None
         self.sessioncontext = "EXPECTINGRAKP4"
         self.lastpayload = None
         self._send_rakp3()
@@ -1698,8 +1730,15 @@ class Session(object):
             return
         self.sessionid = self.pendingsessionid
         self.integrityalgo = self.attemptedhash
-        # AES-CBC-128 is currently the only supported confidentiality algorithm
-        self.confalgo = 1
+
+        # use the negotiated confidentiality algorithm
+        if not self.confalgo:
+            self.confalgo = 1
+        confinfo = CONF_ALGOS.get(self.confalgo, CONF_ALGOS[0])
+        keylen = confinfo.get("keylen", 0)
+        if keylen:
+            self.aeskey = self.k2[:keylen]
+
         self.sequencenumber = 1
         self.sessioncontext = 'ESTABLISHED'
         self.lastpayload = None

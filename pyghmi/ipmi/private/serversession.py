@@ -27,124 +27,17 @@ import uuid
 
 import pyghmi.ipmi.private.constants as constants
 import pyghmi.ipmi.private.session as ipmisession
+from pyghmi.ipmi.private.cipher_suite import (
+    CIPHER_SUITE_PARAMS,
+    build_cipher_suite,
+)
 
 suites: dict[int, bytearray] = {
-    0: bytearray([
-        # Suite 0: “no auth, no integ, no conf”
-        0,0,0,8,   0,0,0,0,  
-        1,0,0,8,   0,0,0,0,  
-        2,0,0,8,   0,0,0,0,
-    ]),
-    1: bytearray([
-        # Suite 1: RAKP-HMAC-SHA1 (0x01), none, none
-        0,0,0,8,   1,0,0,0,
-        1,0,0,8,   0,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    2: bytearray([
-        # Suite 2: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), none
-        0,0,0,8,   1,0,0,0,
-        1,0,0,8,   1,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    3: bytearray([
-        # Suite 3: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), AES-CBC-128 (0x01)
-        0,0,0,8,   1,0,0,0,
-        1,0,0,8,   1,0,0,0,
-        2,0,0,8,   1,0,0,0,
-    ]),
-    4: bytearray([
-        # Suite 4: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), xRC4-128 (0x02)
-        0,0,0,8,   1,0,0,0,
-        1,0,0,8,   1,0,0,0,
-        2,0,0,8,   2,0,0,0,
-    ]),
-    5: bytearray([
-        # Suite 5: RAKP-HMAC-SHA1 (0x01), HMAC-SHA1-96 (0x01), xRC4-40 (0x03)
-        0,0,0,8,   1,0,0,0,
-        1,0,0,8,   1,0,0,0,
-        2,0,0,8,   3,0,0,0,
-    ]),
-    6: bytearray([
-        # Suite 6: RAKP-HMAC-MD5 (0x02), none, none
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   0,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    7: bytearray([
-        # Suite 7: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), none
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   2,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    8: bytearray([
-        # Suite 8: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), AES-CBC-128 (0x01)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   2,0,0,0,
-        2,0,0,8,   1,0,0,0,
-    ]),
-    9: bytearray([
-        # Suite 9: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), xRC4-128 (0x02)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   2,0,0,0,
-        2,0,0,8,   2,0,0,0,
-    ]),
-    10: bytearray([
-        # Suite 10: RAKP-HMAC-MD5 (0x02), HMAC-MD5-128 (0x02), xRC4-40 (0x03)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   2,0,0,0,
-        2,0,0,8,   3,0,0,0,
-    ]),
-    11: bytearray([
-        # Suite 11: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), none
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   3,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    12: bytearray([
-        # Suite 12: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), AES-CBC-128 (0x01)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   3,0,0,0,
-        2,0,0,8,   1,0,0,0,
-    ]),
-    13: bytearray([
-        # Suite 13: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), xRC4-128 (0x02)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   3,0,0,0,
-        2,0,0,8,   2,0,0,0,
-    ]),
-    14: bytearray([
-        # Suite 14: RAKP-HMAC-MD5 (0x02), MD5-128 (0x03), xRC4-40 (0x03)
-        0,0,0,8,   2,0,0,0,
-        1,0,0,8,   3,0,0,0,
-        2,0,0,8,   3,0,0,0,
-    ]),
-    15: bytearray([
-        # Suite 15: RAKP-HMAC-SHA256 (0x03), none, none
-        0,0,0,8,   3,0,0,0,
-        1,0,0,8,   0,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    16: bytearray([
-        # Suite 16: RAKP-HMAC-SHA256 (0x03), HMAC-SHA256-128 (0x04), none
-        0,0,0,8,   3,0,0,0,
-        1,0,0,8,   4,0,0,0,
-        2,0,0,8,   0,0,0,0,
-    ]),
-    17: bytearray([
-        # Suite 17: RAKP-HMAC-SHA256 (0x03), HMAC-SHA256-128 (0x04), AES-CBC-128 (0x01)
-        0,0,0,8,   3,0,0,0,
-        1,0,0,8,   4,0,0,0,
-        2,0,0,8,   1,0,0,0,
-    ]),
+    sid: build_cipher_suite(*algos)
+    for sid, algos in CIPHER_SUITE_PARAMS.items()
 }
 
-supported_suites: list[int] = [3, 8, 17]
-
-print("Available cipher suites:")
-for key, value in suites.items():
-    print(f"Suite {key}: {value.hex()} (Rakp: {value[0:4].hex()}, "
-          f"Integ: {value[4:8].hex()}, Conf: {value[8:12].hex()})")
+supported_suites: list[int] = list(suites.keys())
 
 class ServerSession(ipmisession.Session):
 
@@ -158,8 +51,7 @@ class ServerSession(ipmisession.Session):
 
     def create_open_session_response(self, request: bytearray) -> bytearray:
 
-        requested_suite = request[8:24+8]
-        print(f"Requested cipher suite: {format(requested_suite.hex())}")
+        requested_suite = request[8:24 + 8]
 
         # this is legacy code and can be made much simpler - just not right now
         matching_suite = None
@@ -170,49 +62,69 @@ class ServerSession(ipmisession.Session):
 
         clienttag = int(request[0])
 
-        # if the requested suite doesn't match one we support send 11h error aka decimal 17
+        # if unsupported, return error 0x11 (decimal 17)
         if matching_suite is None or matching_suite not in supported_suites:
             return bytearray([clienttag, 17])
-        
+
         # role = request[1]
         self.clientsessionid = request[4:8]
         self.managedsessionid: bytes = os.urandom(4)
         self.privlevel = 4
 
         self.requested_suite = matching_suite
-        print(f"Requested cipher suite: {format(self.requested_suite)}")
 
         self.requested_suite_data = suites[matching_suite]
 
-        # not implemented yet
-        # auth  = int.from_bytes(self.requested_suite_data[4:8], 'little')
+        self.requested_authalgo = int.from_bytes(
+            self.requested_suite_data[4:8], "little")
 
-        self.requested_integrityalgo = int.from_bytes(self.requested_suite_data[12:16], "little")
-        print( f"Integrity algorithm selected: {format(self.requested_integrityalgo)}")
+        if self.requested_authalgo not in (1, 2, 3):
+            return bytearray([clienttag, 17])
 
-        self.requested_confalgo = int.from_bytes(self.requested_suite_data[20:24], "little")
-        print(f"Confidentiality algorithm selected: {format(self.requested_confalgo)}")
+        self.requested_integrityalgo = int.from_bytes(
+            self.requested_suite_data[12:16], "little"
+        )
+
+        self.requested_confalgo = int.from_bytes(
+            self.requested_suite_data[20:24], "little"
+        )
 
         algo_map = {
             1: (hashlib.sha1, 12),
             2: (hashlib.md5, 16),
-            #3: (hashlib.md5, 16), # disabled because not hmac
+            # 3: (hashlib.md5, 16), # disabled because not hmac
             4: (hashlib.sha256, 16),
             5: (hashlib.sha384, 24),
             6: (hashlib.sha512, 24),
         }
+
+        if self.requested_confalgo not in ipmisession.CONF_ALGOS:
+            return bytearray([clienttag, 17])
+
+        # Ensure authentication and integrity algorithms align
+        auth_map = {1: hashlib.sha1, 2: hashlib.md5, 3: hashlib.sha256}
+        requested_hash = auth_map.get(self.requested_authalgo)
+        integ_entry = algo_map.get(self.requested_integrityalgo, (None,))
+        if requested_hash != integ_entry[0]:
+            return bytearray([clienttag, 17])
+
         try:
             self.currhashlib = algo_map[self.requested_integrityalgo][0]
             self.currhashlen: int = algo_map[self.requested_integrityalgo][1]
         except KeyError:
             return bytearray([clienttag, 17])
 
-        response = bytearray(bytearray([clienttag, 0, self.privlevel, 0])
-            + self.clientsessionid + self.managedsessionid
-            + self.requested_suite_data)
+        response = bytearray(
+            bytearray([clienttag, 0, self.privlevel, 0])
+            + self.clientsessionid
+            + self.managedsessionid
+            + self.requested_suite_data
+        )
         return response
 
-    def __init__(self, authdata, kg, clientaddr, netsocket, request, uuid, bmc):
+    def __init__(
+        self, authdata, kg, clientaddr, netsocket, request, uuid, bmc
+    ):
         # begin conversation per RMCP+ open session request
 
         self.requested_suite = 0
@@ -309,12 +221,18 @@ class ServerSession(ipmisession.Session):
                             + self.username, self.currhashlib).digest()
         self.k1 = hmac.new(self.sik, b'\x01' * 20, self.currhashlib).digest()
         self.k2 = hmac.new(self.sik, b'\x02' * 20, self.currhashlib).digest()
-        self.aeskey = self.k2[0:16]
+        confinfo = ipmisession.CONF_ALGOS.get(
+            self.requested_confalgo,
+            ipmisession.CONF_ALGOS[0]
+        )
+        keylen = confinfo.get("keylen", 0)
+        self.aeskey = self.k2[:keylen] if keylen else None
         hmacdata = (self.Rc + self.clientsessionid
                     + struct.pack("2B", self.rolem, len(self.username))
                     + self.username)
-        expectedauthcode = hmac.new(self.kuid, bytes(hmacdata), self.currhashlib
-                                    ).digest()
+        expectedauthcode = (
+            hmac.new(self.kuid, bytes(hmacdata), self.currhashlib).digest()
+        )
         authcode = struct.pack("%dB" % len(data[8:]), *data[8:])
         if expectedauthcode != authcode:
             # TODO(jjohnson2): RMCP error back at invalid rakp3
@@ -352,7 +270,10 @@ class ServerSession(ipmisession.Session):
             [tagvalue, statuscode, 0, 0]) + self.clientsessionid
         hmacdata = self.Rm + self.managedsessionid + self.uuiddata
         hmacdata = struct.pack('%dB' % len(hmacdata), *hmacdata)
-        authdata = hmac.new(self.sik, hmacdata, self.currhashlib).digest()[:self.currhashlen]
+        authdata = (
+            hmac.new(self.sik, hmacdata, self.currhashlib)
+            .digest()[:self.currhashlen]
+        )
         payload += authdata
         self.send_payload(payload, constants.payload_types['rakp4'],
                           retry=False)
