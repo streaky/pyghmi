@@ -1,5 +1,11 @@
 # pyghmi
 
+## About This Fork
+
+This fork only exists for testing whilst a PR for the original tree is being worked on.
+
+## Original Readme
+
 Pyghmi is a pure Python (mostly IPMI) server management library.
 
 ## Building and installing
